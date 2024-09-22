@@ -37,6 +37,8 @@ game.States.preload = function(){
     	game.load.image('game_over','assets/gameover.png');
     	game.load.image('score_board','assets/scoreboard.png');
 		game.load.image('replay_btn','assets/replay-button.png');
+		game.load.image('life','assets/heart.png');
+		game.load.image('add_life','assets/heart-add.png');
 	}
 	this.create = function(){
 		game.state.start('menu');
@@ -64,9 +66,19 @@ game.States.menu = function(){
 
 game.States.play = function(){
 	this.create = function(){
+		this.score = 0;
+		this.life = 3;
 		this.bg = game.add.tileSprite(0,0,game.width,game.height,'background');//背景图
 		this.pipeGroup = game.add.group();
 		this.pipeGroup.enableBody = true;
+		this.lifeGroup = game.add.group();
+
+		let heartPosition = 10;
+		for (let i = 1; i <= this.life; i++) {
+			this.lifeGroup.create(heartPosition, 7,'life');
+			heartPosition = heartPosition + 30;
+		}
+
 		this.ground = game.add.tileSprite(0,game.height-112,game.width,112,'ground'); //地板
 		this.bird = game.add.sprite(50,150,'bird'); //鸟
 		this.bird.animations.add('fly');
@@ -81,7 +93,7 @@ game.States.play = function(){
 		this.soundScore = game.add.sound('score_sound');
 		this.soundHitPipe = game.add.sound('hit_pipe_sound');
 		this.soundHitGround = game.add.sound('hit_ground_sound');
-		this.scoreText = game.add.bitmapText(game.world.centerX-20, 30, 'flappy_font', game.isReplay ? game.lastScore.toString() : '0', 36);
+		this.scoreText = game.add.bitmapText(game.world.centerX-20, 30, 'flappy_font', this.score.toString(), 36);
 
 		this.readyText = game.add.image(game.width/2, 40, 'ready_text'); //get ready 文字
 		this.playTip = game.add.image(game.width/2,300,'play_tip'); //提示点击
@@ -93,6 +105,73 @@ game.States.play = function(){
 		game.time.events.stop(false);
 		game.input.onDown.addOnce(this.statrGame, this);
 	};
+
+	this.replay = function(){
+		this.bird.destroy();
+		this.pipeGroup.destroy();
+		this.ground.destroy();
+		this.scoreText.destroy();
+		this.lifeGroup.destroy();
+		this.scoreText.destroy();
+		this.readyText.destroy();
+		this.playTip.destroy();
+
+		this.bird = game.add.sprite(50,150,'bird'); //鸟
+		this.bird.animations.add('fly');
+		this.bird.animations.play('fly',12,true);
+		this.bird.anchor.setTo(0.5, 0.5);
+		game.physics.enable(this.bird,Phaser.Physics.ARCADE);
+		this.bird.body.gravity.y = 0;
+
+		this.hasStarted = false; //游戏是否已开始
+
+		game.input.onDown.addOnce(function() {
+			if (!this.addLifeButton.input.pointerOver()) {
+				this.statrGame();
+			}
+		} , this);
+
+		this.bg.stopScroll();
+		this.ground.stopScroll();
+
+		this.pipeGroup = game.add.group();
+		this.pipeGroup.enableBody = true;
+		this.lifeGroup = game.add.group();
+
+		let heartPosition = 10;
+		for (let i = 1; i <= this.life; i++) {
+			this.lifeGroup.create(heartPosition, 7,'life');
+			heartPosition = heartPosition + 30;
+		}
+
+		if (this.life < 3 && (!this.addLifeButton || (this.addLifeButton && this.addLifeButton.game == null))) {
+			this.addLifeButton = game.add.button(280, 7, 'add_life', function(){
+				game.time.events.stop(true);
+				this.life = this.life + 1;
+				this.replay();
+			}, this, null, null, null, null);
+
+			this.addLifeButton.inputEnabled = true;
+		}
+
+		if (this.life >= 3 && (this.addLifeButton || this.addLifeButton.game != null)) {
+			this.addLifeButton.destroy();
+		}
+
+		this.ground = game.add.tileSprite(0,game.height-112,game.width,112,'ground'); //地板
+		game.physics.enable(this.ground,Phaser.Physics.ARCADE);//地面
+		this.ground.body.immovable = true; //固定不动
+
+		this.scoreText = game.add.bitmapText(game.world.centerX-20, 30, 'flappy_font', this.score.toString(), 36);
+		this.readyText = game.add.image(game.width/2, 40, 'ready_text'); //get ready 文字
+		this.playTip = game.add.image(game.width/2,300,'play_tip'); //提示点击
+		this.readyText.anchor.setTo(0.5, 0);
+		this.playTip.anchor.setTo(0.5, 0);
+
+		game.time.events.loop(900, this.generatePipes, this);
+		game.time.events.stop(false);
+	};
+
 	this.update = function(){
 		if(!this.hasStarted) return; //游戏未开始
 		game.physics.arcade.collide(this.bird,this.ground, this.hitGround, null, this); //与地面碰撞
@@ -102,17 +181,24 @@ game.States.play = function(){
 	}
 
 	this.statrGame = function(){
+		if (this.addLifeButton && this.addLifeButton.game != null) {
+			this.addLifeButton.destroy();
+		}
+
 		this.gameSpeed = 200; //游戏速度
 		this.gameIsOver = false;
 		this.hasHitGround = false;
 		this.hasStarted = true;
-		this.score = game.isReplay ? game.lastScore : 0;
 		this.bg.autoScroll(-(this.gameSpeed/10),0);
 		this.ground.autoScroll(-this.gameSpeed,0);
 		this.bird.body.gravity.y = 1150; //鸟的重力
 		this.readyText.destroy();
 		this.playTip.destroy();
-		game.input.onDown.add(this.fly, this);
+		game.input.onDown.add(function (){
+			if (!this.addLifeButton.input.pointerOver()) {
+				this.fly();
+			}
+		}, this);
 		game.time.events.start();
 	}
 
@@ -136,13 +222,32 @@ game.States.play = function(){
 	this.hitPipe = function(){
 		if(this.gameIsOver) return;
 		this.soundHitPipe.play();
-		this.gameOver();
+		this.bg.stopScroll();
+		this.ground.stopScroll();
+		this.pipeGroup.forEachExists(function(pipe){
+			pipe.body.velocity.x = 0;
+		}, this);
+		this.bird.animations.stop('fly', 0);
+		game.input.onDown.remove(this.fly,this);
+		game.time.events.stop(true);
+
+		if (this.life === 0) {
+			this.gameOver();
+		}
 	}
 	this.hitGround = function(){
-		if(this.hasHitGround) return; //已经撞击过地面
-		this.hasHitGround = true;
-		this.soundHitGround.play();
-		this.gameOver(true);
+		if (this.life === 1) {
+			if(this.hasHitGround) return; //已经撞击过地面
+			this.hasHitGround = true;
+			this.soundHitGround.play();
+			this.gameOver(true);
+		} else {
+			game.time.events.stop(true);
+			this.life = this.life - 1;
+			this.soundHitGround.play();
+			this.replay();
+		}
+		
 	}
 	this.gameOver = function(show_text){
 		this.gameIsOver = true;
@@ -164,10 +269,9 @@ game.States.play = function(){
 			game.state.start('play');
 		}, this, null, null, null, null, this.gameOverGroup);
 		var replayBtn1 = game.add.button(game.width/2, 300, 'replay_btn', function(){//重玩按钮
-			window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstley', '_blank').focus();
-			game.isReplay = true;
-			game.lastScore = this.score;
-			game.state.start('play');
+			//window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstley', '_blank').focus();
+			this.gameOverGroup.destroy();
+			this.replay();
 		}, this, null, null, null, null, this.gameOverGroup);
 		gameOverText.anchor.setTo(0.5, 0);
 		scoreboard.anchor.setTo(0.5, 0);
